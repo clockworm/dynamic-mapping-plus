@@ -1,11 +1,6 @@
 package com.cqss.mapping.groovy.tool;
 
 
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.bean.copier.CopyOptions;
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.toolkit.StringPool;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.cqss.mapping.injector.entity.MappingClass;
@@ -13,9 +8,11 @@ import com.cqss.mapping.injector.entity.TableEntity;
 import groovy.lang.GroovyClassLoader;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.ibatis.session.SqlSessionFactory;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 public class ClassLoaderTool {
@@ -32,7 +29,7 @@ public class ClassLoaderTool {
 	 * 编译源码并加载
 	 */
 	public static Class loadClass(String sourceCode) {
-		log.info("编译源码并加载:{}",sourceCode);
+		log.debug("编译源码并加载:{}",sourceCode);
 		return groovyClassLoader.parseClass(sourceCode);
 	}
 	/**
@@ -58,70 +55,46 @@ public class ClassLoaderTool {
 	public static String generateEntitySourceCode(TableEntity tableEntity){
 		String className = firstToUpperCase(tableEntity.getTableName());
 		StringBuffer sourceCode = new StringBuffer();
-		String pkage = "package ".concat(tableEntity.getPackageName()).concat(";\n");
+		String pkage = String.format("package %s;\n",tableEntity.getPackageName());
 		String importPkages  = "import java.math.*;\nimport java.util.*;\nimport java.lang.*;\nimport java.math.*;\nimport com.baomidou.mybatisplus.annotation.*;\n";
-		String definitionClass = "public class ".concat(className).concat("{\n");
-		sourceCode = sourceCode.append(pkage).append(importPkages).append(definitionClass);
+		String definitionClass = String.format("public class %s {\n", className);
+		sourceCode.append(pkage).append(importPkages).append(definitionClass);
 		Map<String, String> columns = tableEntity.getColumns();
 		Set<Map.Entry<String, String>> entries = columns.entrySet();
 		
 		for (Map.Entry<String, String> column : entries) {
 			String definitionField = "";
 			if(column.getKey().equals(tableEntity.getPrimaryKeyColumnName())){
-				definitionField = "@TableId(type = IdType.ASSIGN_ID)\nprivate " + column.getValue() +" "+ column.getKey() + ";\n";
+				definitionField = String.format("\t@TableId(type = IdType.ASSIGN_ID)\n\tprivate %s %s;\n",column.getValue(),column.getKey());
 			}else{
-				definitionField = "private " + column.getValue() +" "+ column.getKey() + ";\n";
+				definitionField = String.format("\tprivate %s %s;\n",column.getValue(),column.getKey());
 			}
 			sourceCode.append(definitionField);
 		}
 		//Get/Set
 		for (Map.Entry<String, String> column : entries) {
-			String definitionGet = "public " + column.getValue() +" get"+ firstToUpperCase(column.getKey()) + "(){\n";
-			definitionGet = definitionGet + "return this."+column.getKey() +";\n}\n";
+			String definitionGet = String.format("\tpublic %s get%s(){\n\t\treturn this.%s;\n\t}\n",column.getValue(), firstToUpperCase(column.getKey()),column.getKey());
 			sourceCode.append(definitionGet);
-			String definitionSet = "public void" +" set"+ firstToUpperCase(column.getKey())+"(" + column.getValue() + " " + column.getKey() + ") {\n";
-			definitionSet = definitionSet + "this."+column.getKey() + "=" + column.getKey() +";\n}\n";
+			String definitionSet = String.format("\tpublic void set%s(%s %s){\n\t\tthis.%s=%s;\n\t}\n", firstToUpperCase(column.getKey()),column.getValue(),column.getKey(),column.getKey(),column.getKey());
 			sourceCode.append(definitionSet);
 		}
 		//ToString
-		sourceCode.append("@Override\npublic String toString() { \nreturn \""+className+"[\"+");
+		sourceCode.append("\t@Override\n\tpublic String toString() { \n\t\treturn \""+className+"[\"+");
 		for (Map.Entry<String, String> column : entries) {
 			sourceCode.append("\" "+column.getKey()+"=\"+"+column.getKey()+"+");
 		}
 		sourceCode.append("\"]\";");
-		sourceCode.append("\n}\n}");
+		sourceCode.append("\n\t}\n}");
 		return sourceCode.toString();
 	}
-	
-	
-	@Deprecated
-	public static String generateLombokEntitySourceCode(TableEntity tableEntity){
-		String className = firstToUpperCase(tableEntity.getTableName());
-		StringBuffer sourceCode = new StringBuffer();
-		String pkage = "package ".concat(tableEntity.getPackageName()).concat(";\n");
-		String importPkages  = "import java.math.*;\nimport lombok.Data;\nimport lombok.ToString;\nimport java.util.*;\nimport java.lang.*;\n";
-		String definitionClass = "@Data\n"+"@ToString\npublic class ".concat(className).concat("{\n");
-		sourceCode = sourceCode.append(pkage).append(importPkages).append(definitionClass);
-		
-		Map<String, String> columns = tableEntity.getColumns();
-		Set<Map.Entry<String, String>> entries = columns.entrySet();
-		
-		for (Map.Entry<String, String> column : entries) {
-			String definitionField = "private " + column.getValue() +" "+ column.getKey() + ";\n";
-			sourceCode.append(definitionField);
-		}
-		sourceCode.append("}");
-		return sourceCode.toString();
-	}
-	
 	
 	public static String generateMapperSourceCode(TableEntity tableEntity){
 		String className = firstToUpperCase(tableEntity.getTableName());
 		StringBuffer sourceCode = new StringBuffer();
-		String pkage = "package ".concat(tableEntity.getPackageName()).concat(";\n");
-		String importPkages  = "import com.cqss.mapping.injector.base.DynamicMapper;\n import " + tableEntity.getPackageName()+"."+className +";\n";
-		String definitionClass = "public interface classNameMapper extends DynamicMapper<className> {}".replaceAll("className",className);
-		sourceCode = sourceCode.append(pkage).append(importPkages).append(definitionClass);
+		String pkage = String.format("package %s;\n",tableEntity.getPackageName());
+		String importPkages  = "import com.cqss.mapping.injector.base.DynamicMapper;\nimport " + tableEntity.getPackageName()+"."+className +";\n";
+		String definitionClass = String.format("public interface classNameMapper extends DynamicMapper<%s> {}", className);
+		sourceCode.append(pkage).append(importPkages).append(definitionClass);
 		return sourceCode.toString();
 	}
 	
@@ -133,5 +106,20 @@ public class ClassLoaderTool {
 		return param.substring(0, 1).toUpperCase() + param.substring(1);
 	}
 	
+//	public static void main(String[] args) {
+//		TableEntity tableEntity = new TableEntity();
+//		HashMap<String, String> map = new HashMap<>();
+//		map.put("id", "String");
+//		map.put("name", "String");
+//		map.put("age", "Integer");
+//		tableEntity.setColumns(map);
+//		tableEntity.setTableName("student");
+//		tableEntity.setPrimaryKeyColumnName("id");
+//		tableEntity.setPackageName("com.cbest.sjt.admin.entity");
+//		String entitySourceCode = ClassLoaderTool.generateEntitySourceCode(tableEntity);
+//		System.err.println(entitySourceCode);
+//		String mapperSourceCode = ClassLoaderTool.generateMapperSourceCode(tableEntity);
+//		System.err.println(mapperSourceCode);
+//	}
+	
 }
-
